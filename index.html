@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tariff Data - ASCII Table</title>
+    <style>
+        /* ===== CUSTOMIZABLE COLORS ===== */
+        :root {
+            /* Base colors */
+            --color-background: #1f1e28;
+            --color-text: #5f5fff;
+            
+            /* Header & paragraph colors */
+            --color-title: #875fff;
+            --color-description: #5f5fff;
+            --color-links: #ff8700;
+            
+            /* Table header colors */
+            --color-table-header: #ff8700;
+            --color-column-details-header: #875fff; /* Details column header color */
+            
+            /* Table column colors */
+            --color-column-country: #875fff;
+            --color-column-tariff: #5f5fff;
+            --color-column-us-tariff: #d75f00;
+            --color-column-us-imports: #5f5fff;
+            --color-column-negotiations: #d75f00;
+            --color-column-concluded: #5f5fff;
+            --color-column-details: #5f5fff;
+            
+            /* Table border colors */
+            --color-table-borders: #302360;
+            --color-table-intersections: #875fff;
+        }
+        /* ===== END CUSTOMIZABLE COLORS ===== */
+        
+        @font-face {
+            font-family: 'ProtoMono';
+            src: url('ProtoMono-Light.otf') format('opentype');
+            font-weight: normal;
+            font-style: normal;
+        }
+        
+        body {
+            font-family: 'ProtoMono', monospace;
+            background-color: var(--color-background);
+            color: var(--color-text);
+            margin: 40px;
+            padding: 0;
+            line-height: 1.2;
+            font-size: 12px;
+        }
+        
+        .container {
+            max-width: 100%;
+            overflow-x: visible;
+        }
+        
+        pre {
+            margin: 0;
+            padding: 0;
+            white-space: pre;
+            font-family: 'ProtoMono', monospace;
+            font-size: 12px;
+        }
+        
+        .controls {
+            margin-top: 20px;
+            margin-bottom: 20px;
+            font-family: 'ProtoMono', monospace;
+            font-size: 14px;
+        }
+        
+        .controls input {
+            font-family: 'ProtoMono', monospace;
+            font-size: 12px;
+            padding: 5px;
+            border: 1px solid var(--color-table-borders);
+            background: var(--color-background);
+            color: var(--color-text);
+            opacity: 1;
+        }
+        
+        .controls input::placeholder {
+            color: var(--color-links);
+            opacity: 1;
+        }
+        
+        /* Remove focus highlights and selection color */
+        .controls input:focus {
+            outline: none;
+            box-shadow: none;
+        }
+        
+        /* Remove selection highlight */
+        .controls input::selection {
+            background-color: var(--color-background);
+            color: var(--color-text);
+        }
+        
+        .tariff-value {
+            color: var(--color-column-tariff);
+        }
+        
+        .import-value {
+            color: var(--color-column-us-imports);
+        }
+        
+        .yes {
+            color: green;
+        }
+        
+        .no {
+            color: red;
+        }
+        
+        .header {
+            color: var(--color-table-header);
+        }
+        
+        .header {
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .header:hover {
+            background-color: transparent;
+        }
+        
+        .source-link {
+            color: var(--color-links);
+            text-decoration: none;
+            font-weight: bold;
+        }
+        
+        .source-link:hover {
+            text-decoration: underline;
+        }
+        
+        .title {
+            font-size: 12px;
+            text-align: left;
+            margin-bottom: 20px;
+            font-weight: bold;
+            font-family: 'ProtoMono', monospace;
+            color: var(--color-title);
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            font-size: 12px;
+            font-family: 'ProtoMono', monospace;
+        }
+        
+        .error {
+            color: red;
+            text-align: center;
+            padding: 20px;
+            font-size: 12px;
+            font-family: 'ProtoMono', monospace;
+            border: 1px solid red;
+            margin: 20px;
+        }
+        
+        .description {
+            font-family: 'ProtoMono', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            margin-top: 20px;
+            padding: 0;
+            text-align: left;
+            color: var(--color-description);
+            /* Width will be set by JavaScript */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="title">Tariffs Deals Tracker by <a href="https://x.com/figure31_" class="source-link" target="_blank">Figure31</a> for <a href="https://x.com/standardvoids" class="source-link" target="_blank">S&V</a></div>
+        <div class="description">
+            This table tracks all US reciprocal tariffs outlined by Trump on April 2, 2025. It displays the tariff imposed on the US by the specific country as calculated by the US White House and their reciprocal proposed response. When available, the table also displays the countries' <a href="https://www.cbc.ca/news/business/trump-fake-tariff-rates-1.7501604" class="source-link" target="_blank">% share of US imports</a>. Countries above 1% are key. We use AI to track two things: are negotiations ongoing and if negotiations have concluded. Details are provided on the state of negotiations.
+        </div>
+        <div class="controls">
+            <input type="text" id="searchInput" placeholder="Search countries...">
+        </div>
+        <div id="ascii-table">
+            <div class="loading">Loading tariff data...</div>
+        </div>
+    </div>
+
+    <script>
+        // Path to the CSV file
+        const csvFilePath = 'merged_tariffs.csv';
+        
+        // Fixed width for the details column (adjust as needed)
+        const DETAILS_WIDTH = 60;
+        
+        // Storage for loaded data
+        let currentData = [];
+        
+        // Extract URL from details text
+        function extractUrl(detailsText) {
+            const urlMatch = detailsText.match(/\[(https?:\/\/[^\]]+)\]/);
+            return urlMatch ? urlMatch[1] : null;
+        }
+
+        // Function to wrap text into multiple lines
+        function wrapText(text, maxWidth) {
+            if (!text || text.length <= maxWidth) return [text];
+            
+            const words = text.split(' ');
+            const lines = [];
+            let currentLine = '';
+            
+            words.forEach(word => {
+                // Handle the URL part specially
+                if (word.includes('[http') && word.includes(']')) {
+                    const urlMatch = word.match(/\[(https?:\/\/[^\]]+)\]/);
+                    if (urlMatch) {
+                        if (currentLine.length + '[Source]'.length > maxWidth) {
+                            lines.push(currentLine.trim());
+                            currentLine = '[Source]';
+                        } else {
+                            currentLine += ' [Source]';
+                        }
+                        return;
+                    }
+                }
+                
+                if (currentLine.length + word.length + 1 > maxWidth) {
+                    lines.push(currentLine.trim());
+                    currentLine = word;
+                } else {
+                    currentLine += (currentLine ? ' ' : '') + word;
+                }
+            });
+            
+            if (currentLine) {
+                lines.push(currentLine.trim());
+            }
+            
+            return lines;
+        }
+
+        // Colorize text
+        function colorize(text, type) {
+            if (!text) return '';
+            
+            switch(type) {
+                case 'tariff':
+                    return `<span class="tariff-value">${text}</span>`;
+                case 'us-tariff':
+                    return `<span style="color: var(--color-column-us-tariff);">${text}</span>`;
+                case 'import':
+                    return `<span class="import-value">${text}</span>`;
+                case 'negotiating':
+                    return text.toLowerCase() === 'yes' 
+                        ? `<span class="yes">${text}</span>` 
+                        : text.toLowerCase() === 'no' 
+                            ? `<span class="no">${text}</span>` 
+                            : `<span style="color: var(--color-column-negotiations);">${text}</span>`;
+                case 'concluded':
+                    return text.toLowerCase() === 'yes' 
+                        ? `<span class="yes">${text}</span>` 
+                        : text.toLowerCase() === 'no' 
+                            ? `<span class="no">${text}</span>` 
+                            : `<span style="color: var(--color-column-concluded);">${text}</span>`;
+                case 'country':
+                    return `<span style="color: var(--color-column-country);">${text}</span>`;
+                case 'details':
+                    return `<span style="color: var(--color-column-details);">${text}</span>`;
+                default:
+                    return text;
+            }
+        }
+
+        // Parse CSV data
+        function parseCSV(csv) {
+            const lines = csv.split('\n');
+            const result = [];
+            const headers = lines[0].split(',');
+            
+            for (let i = 1; i < lines.length; i++) {
+                if (!lines[i].trim()) continue;
+                const obj = {};
+                const currentLine = lines[i].split(',');
+                
+                // Get country (might have commas in the name)
+                obj[headers[0]] = currentLine[0];
+                
+                // Get other standard fields
+                for (let j = 1; j < 6; j++) {
+                    obj[headers[j]] = currentLine[j] || '';
+                }
+                
+                // Handle details field with potential URLs
+                const detailsStart = currentLine.slice(6).join(',');
+                obj[headers[6]] = detailsStart || '';
+                
+                result.push(obj);
+            }
+            return result;
+        }
+
+        // Create the ASCII table
+        function createAsciiTable(data, sortColumn = null, sortDirection = null) {
+            const tableContainer = document.getElementById('ascii-table');
+            const headers = ['COUNTRY', 'TARIFF', 'US TARIFF', 'US IMPORTS', 'NEGOTIATIONS', 'CONCLUDED', 'DETAILS'];
+            
+            // Map display headers to CSV column names
+            const headerToCSVMapping = {
+                'COUNTRY': 'Country',
+                'TARIFF': 'Current Tariff',
+                'US TARIFF': 'Proposed Tariff',
+                'US IMPORTS': '% of imports to US',
+                'NEGOTIATIONS': 'Negotiating',
+                'CONCLUDED': 'Negotiations Concluded',
+                'DETAILS': 'Details'
+            };
+            
+            if (!data || data.length === 0) {
+                tableContainer.innerHTML = '<div class="error">No data found in the CSV file.</div>';
+                return;
+            }
+            
+            // Get sorted data
+            let sortedData = [...data];
+            if (sortColumn !== null) {
+                const displayHeader = headers[sortColumn];
+                const dataKey = headerToCSVMapping[displayHeader];
+                const isAscending = sortDirection === 'asc';
+                const isNumeric = [1, 2, 3].includes(sortColumn);
+                
+                sortedData.sort((a, b) => {
+                    let valueA = a[dataKey] || '';
+                    let valueB = b[dataKey] || '';
+                    
+                    if (isNumeric) {
+                        valueA = parseFloat(valueA) || 0;
+                        valueB = parseFloat(valueB) || 0;
+                    }
+                    
+                    if (valueA < valueB) return isAscending ? -1 : 1;
+                    if (valueA > valueB) return isAscending ? 1 : -1;
+                    return 0;
+                });
+            }
+            
+            // Use manually defined column widths
+            const manualColWidths = [
+                32,  // COUNTRY
+                8,  // TARIFF
+                11,  // US TARIFF
+                12,  // US IMPORTS
+                14,  // NEGOCIATIONS?
+                11,  // CONCLUDED
+                DETAILS_WIDTH  // DETAILS
+            ];
+            
+            // Use manual column widths
+            const colWidths = manualColWidths;
+            
+            // Build table
+            let table = '<pre>\n';
+            
+            // Top border
+            table += `<span style="color: var(--color-table-intersections);">+</span>`;
+            colWidths.forEach(width => {
+                table += `<span style="color: var(--color-table-borders);">` + '-'.repeat(width) + '</span>';
+                table += `<span style="color: var(--color-table-intersections);">+</span>`;
+            });
+            table += '\n';
+            
+            // Headers
+            table += `<span style="color: var(--color-table-borders);">|</span>`;
+            headers.forEach((header, i) => {
+                let headerText = header;
+                if (sortColumn === i) {
+                    headerText += sortDirection === 'asc' ? ' ▲' : ' ▼';
+                }
+                
+                const paddedText = headerText.padEnd(colWidths[i]);
+                
+                // Make only non-DETAILS columns sortable
+                if (i === 6) { // DETAILS column
+                    table += `<span style="color: var(--color-column-details-header);">${paddedText}</span>`;
+                } else {
+                    const headerHtml = `<span class="header" data-col="${i}" style="color: var(--color-table-header);">${paddedText}</span>`;
+                    table += headerHtml;
+                }
+                table += `<span style="color: var(--color-table-borders);">|</span>`;
+            });
+            table += '\n';
+            
+            // Header separator
+            table += `<span style="color: var(--color-table-intersections);">+</span>`;
+            colWidths.forEach(width => {
+                table += `<span style="color: var(--color-table-borders);">` + '-'.repeat(width) + '</span>';
+                table += `<span style="color: var(--color-table-intersections);">+</span>`;
+            });
+            table += '\n';
+            
+            // Data rows
+            sortedData.forEach((row, rowIndex) => {
+                // Process details text for wrapping
+                let details = row['Details'] || '';
+                const url = extractUrl(details);
+                
+                // Replace the URL with [Source] for calculating wrapping
+                let detailsForWrapping = details;
+                if (url) {
+                    detailsForWrapping = details.replace(/\[(https?:\/\/[^\]]+)\]/, '[Source]');
+                }
+                
+                // Ensure empty details still have at least one line
+                if (!detailsForWrapping.trim()) {
+                    detailsForWrapping = ' ';
+                }
+                
+                // Wrap the details text
+                const wrappedDetails = wrapText(detailsForWrapping, DETAILS_WIDTH - 2); // -2 for padding
+                const numLines = Math.max(1, wrappedDetails.length);
+                
+                // First line with all columns
+                table += `<span style="color: var(--color-table-borders);">|</span>`;
+                
+                // Country column
+                table += colorize(row['Country'].padEnd(colWidths[0]), 'country');
+                table += `<span style="color: var(--color-table-borders);">|</span>`;
+                
+                // Current Tariff - add % symbol
+                const currentTariff = row['Current Tariff'] ? row['Current Tariff'] + '%' : '';
+                table += colorize(currentTariff.padEnd(colWidths[1]), 'tariff');
+                table += `<span style="color: var(--color-table-borders);">|</span>`;
+                
+                // Proposed Tariff - add % symbol
+                const proposedTariff = row['Proposed Tariff'] ? row['Proposed Tariff'] + '%' : '';
+                table += colorize(proposedTariff.padEnd(colWidths[2]), 'us-tariff');
+                table += `<span style="color: var(--color-table-borders);">|</span>`;
+                
+                // % of imports to US - add % symbol
+                const importVal = row['% of imports to US'] ? row['% of imports to US'] + '%' : 'N/A';
+                table += colorize(importVal.padEnd(colWidths[3]), 'import');
+                table += `<span style="color: var(--color-table-borders);">|</span>`;
+                
+                // Negotiating
+                const negotiating = row['Negotiating'] || '';
+                table += colorize(negotiating.padEnd(colWidths[4]), 'negotiating');
+                table += `<span style="color: var(--color-table-borders);">|</span>`;
+                
+                // Negotiations Concluded
+                const concluded = row['Negotiations Concluded'] || '';
+                table += colorize(concluded.padEnd(colWidths[5]), 'concluded');
+                table += `<span style="color: var(--color-table-borders);">|</span>`;
+                
+                // First line of Details with URL
+                let firstLine = wrappedDetails[0] || ' ';
+                
+                // Handle URL - if the URL is in the first line
+                if (url && details.indexOf('[') < DETAILS_WIDTH) {
+                    const linkText = `<a href="${url}" class="source-link" target="_blank">[Source]</a>`;
+                    
+                    // Replace [URL] with [Source] in the first line
+                    firstLine = firstLine.replace(/\[Source\]/, linkText);
+                }
+                
+                // Ensure fixed width is respected for HTML content
+                const htmlLength = firstLine.replace(/<[^>]*>/g, '').length;
+                const paddingNeeded = colWidths[6] - htmlLength;
+                table += colorize(firstLine + ' '.repeat(Math.max(0, paddingNeeded)), 'details');
+                table += `<span style="color: var(--color-table-borders);">|</span>\n`;
+                
+                // Additional lines for wrapped details text
+                for (let i = 1; i < numLines; i++) {
+                    table += `<span style="color: var(--color-table-borders);">|</span>`;
+                    
+                    // Empty space for all columns except details
+                    for (let j = 0; j < colWidths.length - 1; j++) {
+                        table += ' '.repeat(colWidths[j]) + `<span style="color: var(--color-table-borders);">|</span>`;
+                    }
+                    
+                    // Current line of Details
+                    let currentLine = wrappedDetails[i] || '';
+                    
+                    // Handle URL - if the URL is in this line
+                    if (url && currentLine.includes('[Source]')) {
+                        const linkText = `<a href="${url}" class="source-link" target="_blank">[Source]</a>`;
+                        currentLine = currentLine.replace(/\[Source\]/, linkText);
+                    }
+                    
+                    // Ensure fixed width is respected for HTML content
+                    const htmlLength = currentLine.replace(/<[^>]*>/g, '').length;
+                    const paddingNeeded = colWidths[6] - htmlLength;
+                    table += colorize(currentLine + ' '.repeat(Math.max(0, paddingNeeded)), 'details');
+                    table += `<span style="color: var(--color-table-borders);">|</span>\n`;
+                }
+                
+                // No empty spacing row
+                
+                // Row separator (except after the last row)
+                if (rowIndex < sortedData.length - 1) {
+                    table += `<span style="color: var(--color-table-intersections);">+</span>`;
+                    colWidths.forEach(width => {
+                        table += `<span style="color: var(--color-table-borders);">` + '-'.repeat(width) + '</span>';
+                        table += `<span style="color: var(--color-table-intersections);">+</span>`;
+                    });
+                    table += '\n';
+                }
+            });
+            
+            // Bottom border
+            table += `<span style="color: var(--color-table-intersections);">+</span>`;
+            colWidths.forEach(width => {
+                table += `<span style="color: var(--color-table-borders);">` + '-'.repeat(width) + '</span>';
+                table += `<span style="color: var(--color-table-intersections);">+</span>`;
+            });
+            table += '\n</pre>';
+            
+            tableContainer.innerHTML = table;
+            
+            // Add click event to headers for sorting
+            document.querySelectorAll('.header').forEach(header => {
+                header.addEventListener('click', () => {
+                    const col = parseInt(header.getAttribute('data-col'));
+                    let direction = 'asc';
+                    
+                    if (sortColumn === col) {
+                        direction = sortDirection === 'asc' ? 'desc' : 'asc';
+                    }
+                    
+                    sortTable(col, direction);
+                });
+            });
+        }
+
+        // Sort table function
+        function sortTable(columnIndex, direction = 'asc') {
+            // Prevent sorting the details column (index 6)
+            if (columnIndex === 6) return;
+            createAsciiTable(currentData, columnIndex, direction);
+        }
+
+        // Search function
+        function searchTable() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            
+            if (!searchTerm) {
+                createAsciiTable(currentData);
+                return;
+            }
+            
+            const filteredData = currentData.filter(row => {
+                return row['Country'].toLowerCase().includes(searchTerm);
+            });
+            
+            createAsciiTable(filteredData);
+        }
+
+        // Load CSV data and initialize the table
+        async function loadCSVData() {
+            try {
+                const response = await fetch(csvFilePath);
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to load CSV file: ${response.status} ${response.statusText}`);
+                }
+                
+                const csvData = await response.text();
+                currentData = parseCSV(csvData);
+                
+                // Initialize table with the data
+                createAsciiTable(currentData);
+                
+                // Add search event listener
+                document.getElementById('searchInput').addEventListener('input', searchTable);
+            } catch (error) {
+                console.error('Error loading CSV data:', error);
+                document.getElementById('ascii-table').innerHTML = `
+                    <div class="error">
+                        <p>Error loading CSV data: ${error.message}</p>
+                        <p>Please make sure the file "merged_tariffs.csv" exists in the same directory as this HTML file.</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', () => {
+            loadCSVData();
+            
+            // Function to calculate total column width precisely
+            const setDescriptionWidth = () => {
+                // Need to wait until the table is created and rendered
+                setTimeout(() => {
+                    // Calculate the exact width based on column widths and borders
+                    const colWidths = [32, 8, 11, 12, 14, 10, 60]; // From manualColWidths
+                    const totalColWidth = colWidths.reduce((sum, width) => sum + width, 0);
+                    // Add border characters (8 vertical bars per row)
+                    const tableWidth = totalColWidth + 8;
+                    
+                    // Convert to character width (approximate pixels based on monospaced font)
+                    // Each character is approximately 8px in monospace font
+                    const pixelWidth = tableWidth * 8;
+                    
+                    // Set the description width
+                    const descriptionElement = document.querySelector('.description');
+                    if (descriptionElement) {
+                        // Set character width using ch unit (width of "0" character)
+                        descriptionElement.style.width = tableWidth + 'ch';
+                        console.log('Set description width to:', tableWidth + 'ch');
+                    }
+                }, 300);
+            };
+            
+            // Set width after initial load and when table is updated
+            window.addEventListener('resize', setDescriptionWidth);
+            
+            // Add observer to watch for table changes
+            const observer = new MutationObserver(setDescriptionWidth);
+            observer.observe(document.getElementById('ascii-table'), { 
+                childList: true, 
+                subtree: true 
+            });
+        });
+    </script>
+</body>
+</html>
